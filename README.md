@@ -9,6 +9,6 @@ Este é um estudo bastante relevante tendo em vista o contexto dos ultimos anos 
 
 Dados brutos retirados de [covid.saude.gov](https://covid.saude.gov.br)  
 
-Para compilar o relatório basta colocar o seguinte csv no fread [dados utilizados](https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SRAG/2021/INFLUD21-15-03-2022.csv).
+Para compilar o relatório basta baixar as bandeiras "ban" o aruivo "Lista-de-Municipios-com-IBGE-Brasil.xlsx" e colocar o seguinte csv no fread [dados utilizados](https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SRAG/2021/INFLUD21-15-03-2022.csv).
 
 [Relatório análise descritiva (SRAG)](https://rpubs.com/Ronaldo_C_Silva/analise_srag) 
