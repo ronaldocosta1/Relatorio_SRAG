@@ -1,4 +1,4 @@
-# Relatório 
+# Relatório R
 
 ### Relatório da análise descritiva dos dados da Síndrome Respiratória Aguda Grave (SRAG) na região nordeste no ano de 2021.
 
