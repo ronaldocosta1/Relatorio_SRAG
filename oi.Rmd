@@ -1,0 +1,672 @@
+---
+title: |
+  ![](https://i.imgur.com/javMz14.png){width=1000px style="dispaly: block; margin:0 auto;"}
+  
+author: "Ronaldo C. Silva"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+    html_document:
+       code_folding: hide
+       highlight: textmate
+       includes:
+         in_header: "baner0.html"
+       theme: flatly
+       number_sections: yes
+       toc: yes
+       toc_float:
+         collapsed: yes
+         smooth_scroll: no
+---
+
+# Introdução
+
+## Contextualização
+
+<div style="text-align: justify">
+
+O banco de dados analisado nos apresenta os registros da síndrome respiratória aguda grave (SRAG) no Brasil.
+Este trabalho tem como objetivo apresentar uma análise descritiva dos dados onde iremos realizar um estudo quantitativo que tem como **principal objetivo resumir, sumarizar e explorar o comportamento dos dados** na região nordeste do Brasil no ano de 2021.  
+  
+## Importancia
+
+Uma síndrome é definida como um conjunto de sinais e sintomas que podem ser gerados por várias causas diferentes. Ao descobrir a causa específica de uma síndrome, ela deixa de ser uma síndrome e passa a ser considerada uma doença.
+Os profissionais da saúde são, portanto, os responsáveis por coletar e interpretar esses sinais e sintomas para chegar ao diagnóstico.
+Antes de fazer o exame de diagnóstico (teste rápido ou RT-PCR) ou identificarmos que uma pessoa teve contato com um caso confirmado, não podemos afirmar que sintomas de gripe ou de SRAG são necessariamente um caso de covid-19.
+Se for um caso leve, considera-se que a pessoa apresenta a Síndrome Gripal, com suspeita de covid-19. Nos casos graves, dizemos que ela apresenta a Síndrome Respiratória Aguda Grave, com suspeita de covid-19.
+
+De acordo com a Secretaria do Estado de Saúde de Minas Gerais, a SRAG pode ser definida, na prática, como indivíduos que apresentem pelo menos dois dos seguintes sinais e sintomas: 
+
+</div>
+
+* Febre de início súbito (termometrada ou não);   
+* Calafrios;  
+* Dor de cabeça;  
+* Tosse ou nariz escorrendo (coriza);  
+* Dor de garganta ou problemas no olfato ou no paladar.  
+
+E que passe a apresentar:  
+
+* Dificuldade ou desconforto para respirar;   
+* Sensação de peso ou pressão no peito;   
+* Menor oxigenação no sangue (saturação de oxigênio < 95%);   
+* Rosto ou lábios azuis ou arroxeados.  
+
+Em crianças, também podem ocorrer sinais como:  
+
+* Falta de ar;  
+* Desidratação;  
+* Menor apetite.  
+
+<div style="text-align: justify">
+
+Quando uma pessoa apresentar sintomas de SRAG, ela deve buscar atendimento médico imediatamente. Geralmente, são necessários cuidados mais intensos, como a internação, o isolamento social e a realização de testes que auxiliem na identificação da causa da SRAG. 
+
+</div>
+
+```{r, include=FALSE}
+# Dados
+
+#Foram utilizadas nrow(dados) das 161 variaveis e os estados pertencentes a região nordeste (8 dos 26 estados) do banco de dados. 
+```
+
+
+
+## Pacotes utilizados
+
+```{r, message=FALSE, warning=FALSE}
+
+# Visualização
+library(ggimage)
+library(knitr)
+library(kableExtra)
+library(htmltools)
+library(xlsx)
+
+
+# Tratamento e importação dos dados
+library(data.table)
+library(lubridate)
+library(readxl)
+library(tidyverse) 
+library(rmarkdown)
+library(markdown)
+library(janitor)
+library(stringr)
+library(rsconnect)
+
+
+
+```
+
+
+
+## Importação e tratamento inicial do conjunto de dados
+
+```{r, message=FALSE, warning=FALSE}
+
+dados <- fread('INFLUD21-10-01-2022.csv', nrows = 50000,
+           selec = c('DT_SIN_PRI','SG_UF_NOT','ID_MUNICIP','CO_MUN_NOT','CS_SEXO',  # 17 das 161 colunas 
+                     'NU_IDADE_N','FEBRE','TOSSE','GARGANTA','DOR_ABD','FADIGA',
+                     'PERD_OLFT','PERD_PALA','DIABETES','OBESIDADE','VACINA_COV')) %>% 
+          filter(SG_UF_NOT  %in% c('AL','BA','CE','MA','PB','PE','PI','RN','SE'))   # Estados do nordeste (8 dos 26 estados)
+
+
+dados$DT_SIN_PRI <- dmy(dados$DT_SIN_PRI) # convertendo para data
+dados$DT_SIN_PRI <- parse_date_time(format(dados$DT_SIN_PRI, "%y-%m"), "ym")  # convertendo para mês e ano
+
+
+
+bruto_municipios <- read.xlsx("Lista-de-Municipios-com-IBGE-Brasil.xlsx", sheetName  = "Lista de Municípios IBGE", encoding = "UTF-8")
+
+populacao <- bruto_municipios[ ,-c(1,3,4,6,8,9,10)]
+colnames(populacao) <- c('CO_MUN_NOT','municipio','populacao_2010')
+
+rm(bruto_municipios)
+
+#https://pt.stackoverflow.com/questions/46473/remover-acentos
+rm_accent <- function(str,pattern="all") {
+  # Rotinas e funções úteis V 1.0
+  # rm.accent - REMOVE ACENTOS DE PALAVRAS
+  # Função que tira todos os acentos e pontuações de um vetor de strings.
+  # Parâmetros:
+  # str - vetor de strings que terão seus acentos retirados.
+  # patterns - vetor de strings com um ou mais elementos indicando quais acentos deverão ser retirados.
+  #            Para indicar quais acentos deverão ser retirados, um vetor com os símbolos deverão ser passados.
+  #            Exemplo: pattern = c("´", "^") retirará os acentos agudos e circunflexos apenas.
+  #            Outras palavras aceitas: "all" (retira todos os acentos, que são "´", "`", "^", "~", "¨", "ç")
+  if(!is.character(str))
+    str <- as.character(str)
+  
+  pattern <- unique(pattern)
+  
+  if(any(pattern=="Ç"))
+    pattern[pattern=="Ç"] <- "ç"
+  
+  symbols <- c(
+    acute = "áéíóúÁÉÍÓÚýÝ",
+    grave = "àèìòùÀÈÌÒÙ",
+    circunflex = "âêîôûÂÊÎÔÛ",
+    tilde = "ãõÃÕñÑ",
+    umlaut = "äëïöüÄËÏÖÜÿ",
+    cedil = "çÇ"
+  )
+  
+  nudeSymbols <- c(
+    acute = "aeiouAEIOUyY",
+    grave = "aeiouAEIOU",
+    circunflex = "aeiouAEIOU",
+    tilde = "aoAOnN",
+    umlaut = "aeiouAEIOUy",
+    cedil = "cC"
+  )
+  
+  accentTypes <- c("´","`","^","~","¨","ç")
+  
+  if(any(c("all","al","a","todos","t","to","tod","todo")%in%pattern)) # opcao retirar todos
+    return(chartr(paste(symbols, collapse=""), paste(nudeSymbols, collapse=""), str))
+  
+  for(i in which(accentTypes%in%pattern))
+    str <- chartr(symbols[i],nudeSymbols[i], str)
+  
+  return(str)
+}
+
+
+populacao$municipio <- rm_accent(populacao$municipio) #removendo os acentos para o match
+
+
+dados <- merge(dados,        # juntando municipio e populacao
+               populacao,
+               all.x = TRUE)
+
+dados <- dados[,-17]
+
+
+# table(dados$FEBRE)
+# summary(dados$FEBRE)
+
+#50807 = 21,3% NA
+
+dados$FEBRE <- gsub('1','Sim',dados$FEBRE)
+dados$FEBRE <- gsub('2','Não',dados$FEBRE)
+dados$FEBRE <- gsub('9','Ignorado',dados$FEBRE)
+
+#50807 = 21,3% NA
+                
+dados$TOSSE <- gsub('1','sim',dados$TOSSE)
+dados$TOSSE <- gsub('2','não',dados$TOSSE)
+dados$FEBRE <- gsub('9','Ignorado',dados$FEBRE)
+
+
+#105679  = 30% NA
+
+dados$GARGANTA <- gsub('1','Sim',dados$GARGANTA)
+dados$GARGANTA <- gsub('2','Não',dados$GARGANTA)
+dados$GARGANTA <- gsub('9','Ignorado',dados$GARGANTA)
+
+
+
+#105679 = 44,3% NA
+
+dados$DOR_ABD <- gsub('1','Sim',dados$DOR_ABD)
+dados$DOR_ABD <- gsub('2','Não',dados$DOR_ABD)
+dados$DOR_ABD <- gsub('9','Ignorado',dados$DOR_ABD)
+
+
+# table(dados$FADIGA)
+# summary(dados$GARGANTA)
+
+#105679 = 44,3% NA
+
+
+dados$FADIGA <- gsub('1','Sim',dados$FADIGA)
+dados$FADIGA <- gsub('2','Não',dados$FADIGA)
+dados$FADIGA <- gsub('9','Ignorado',dados$FADIGA)
+
+
+# table(dados$PERD_OLFT)
+# summary(dados$GARGANTA)
+
+#105679 = 44,3% NA
+
+dados$PERD_OLFT <- gsub('1','Sim',dados$PERD_OLFT)
+dados$PERD_OLFT <- gsub('2','Não',dados$PERD_OLFT)
+dados$PERD_OLFT <- gsub('9','Ignorado',dados$PERD_OLFT)
+
+# 
+# table(dados$PERD_PALA)
+# summary(dados$GARGANTA)
+
+#105679 = 44,3% NA
+
+dados$PERD_PALA <- gsub('1','Sim',dados$PERD_PALA)
+dados$PERD_PALA <- gsub('2','Não',dados$PERD_PALA)
+dados$PERD_PALA <- gsub('9','Ignorado',dados$PERD_PALA)
+
+
+dados$VACINA_COV <- gsub('1','Vacinado',dados$VACINA_COV)
+dados$VACINA_COV <- gsub('2','Não Vacinado',dados$VACINA_COV)
+dados$VACINA_COV <- gsub('9','Ignorado',dados$VACINA_COV)
+
+
+
+dados <- dados %>% 
+  filter(CS_SEXO %in% c("M","F")) 
+
+
+dados$CS_SEXO <- gsub("M","Masculino",dados$CS_SEXO)
+dados$CS_SEXO <- gsub("F","Feminino",dados$CS_SEXO)
+
+
+analise_estados <- function(estado){
+
+analise_estado <- dados %>%  
+                  filter(SG_UF_NOT == estado) %>%  
+                  select_(.dots = c("ID_MUNICIP"))  #casos de alagoas
+
+
+est <- data.frame(table(analise_estado$ID_MUNICIP)) %>%  # distribuição de frequencia de alagoas
+                  rename("Municipio" = "Var1",
+                         "Frequencia" = "Freq") %>% 
+                  mutate(Porcentagem = round(Frequencia/sum(Frequencia)*100,digits = 2))
+      
+populacao$municipio <- toupper(populacao$municipio) #convertendo para letras maiusculas
+
+
+est$Populacao_2010 <- populacao$populacao_2010[match(est$Municipio,populacao$municipio)] #criando o campo população
+
+est <- within(est, "1 Caso a cada x pessoas" <- round(Populacao_2010/Frequencia)) #criando o compo '1 caso a cada x pessoas'
+
+est
+
+}
+
+saida_AL <- analise_estados("AL")
+saida_BA <- analise_estados("BA")
+saida_CE <- analise_estados("CE")
+saida_MA <- analise_estados("MA")
+saida_PB <- analise_estados("PB")
+saida_PE <- analise_estados("PE")
+saida_PI <- analise_estados("PI")
+saida_RN <- analise_estados("RN")
+saida_SE <- analise_estados("SE")
+
+
+
+
+```
+
+
+### Visualização de dados
+
+```{r, message=FALSE, warning=FALSE}
+
+paged_table(dados)
+
+
+```
+
+O banco contém `r ncol(dados)` váriaveis e `r nrow(dados)` registros. 
+
+
+#### Dicionario
+
+Variáveis:
+
+* **DT_SIN_PRI** = Data do preenchimento da ficha de notificação;  
+* **SG_UF_NOT** = UF estado;  
+* **ID_MUNICIP** = municipio;  
+* **CO_MUN_NOT** = cod municipio;  
+* **CS_SEXO** = sexo;  
+* **NU_IDADE_N** = idade;  
+* **FEBRE** = Sinais e Sintomas/Febre;  
+* **TOSSE** =  Sinais e Sintomas/Tosse;  
+* **GARGANTA** = Sinais e Sintomas/garganta;  
+* **DOR_ABD** = Sinais e Sintomas/Dor abdomina;  
+* **FADIGA** = Sinais e Sintomas/Fadiga;  
+* **PERD_OLFT** = Sinais e Sintomas/Perda do Olfato;  
+* **PERD_PALA** = Sinais e Sintomas/Perda do Paladar;  
+* **DIABETE** = Fatores de risco/ Diabetes mellitus;  
+* **OBESIDADE** = Fatores de risco/ Obesidade;  
+* **VACINA_COV** =  Recebeu vacina COVID-19?;  
+* **populacao_2010** = População do municipio no censo de 2010.
+
+
+# Metodologia 
+
+<div style="text-align: justify">
+
+Nesse trabalho foram realizadas análises descritivas no banco de dados da sindrome respiratoria aguda grave (SRAG) utilizando a região nordeste, inicialmente foram escolhidas e classificadas as variaveis de interresse e em seguida utilizado métodos e ferramentas estatísticas, gráficos e tabelas para obter informações de como os dados se comportam e 
+como estão distribuidos.
+
+</div>
+
+# Informações nordeste 
+
+**Classificação das variaveis**
+
+A primeira ação realizada foi uma separação das variaveis qualitativas e quantitativas  obtendo como resultado para as variáveis qualitativas:  
+DT_SIN_PRI, ID_MUNICIP, SG_UF_NOT, CS_SEXO, FEBRE, TOSSE, GARGANTA, DOR_ABD, FADIGA, PERD_OLFT, PERD_PALA, DIABETES, OBESIDADE, VACINA_COV.
+
+E para as variáveis quantitativas:  
+CO_MUN_NOT, NU_IDADE_N, populacao_2010.
+
+
+**Análise estados do nordeste**
+
+<div style="text-align: justify">
+
+A tabela 3.1 foi construida com o nome de cada estado pertencente a região nordeste, a frequência e a porcentagem onde possui informações das distribuições dos registros, é possivel obter a informação de quais os estados que mais possuem registros onde o estado "lider" é o Ceará seguido com um valor razoavelmete perto pela Bahia, não podemos confirmar nenhuma afirmação do por que o número é tão elevado em relação aos demais, porem podemos pensar em algumas hipóteses para esses valores como por exemplo uma população grande e uma area pequena causando menos distanciamento entre as pessoas.
+
+
+</div>
+
+## Tabela estados
+```{r, message=FALSE, warning=FALSE}
+estados <- data.frame(table(dados$SG_UF_NOT)) %>%  # estados
+           rename('Estados' = 'Var1',
+                   'Frequencia' = 'Freq') %>% 
+           mutate(Porcentagem = round(Frequencia/sum(Frequencia)*100,digits = 2)) %>% 
+  adorn_totals("row") %>% 
+  kable(caption = "Distribuição de frequência entre os estados do nordeste no ano de 2021",
+        format.args = list(decimal.mark = ",", big.mark = "."), col.names = c("Estados","Frequência","Porcentagem (%)")) %>% 
+  kable_styling(bootstrap_options = c("striped","hover","condesed"), full_width = T, latex_options = "HOLD_position")
+
+
+estados
+
+#paged_table(estados)
+
+
+```
+
+
+
+
+
+## Distribuição estados
+```{r, message=FALSE, warning=FALSE}
+
+
+estados <- data.frame(table(dados$SG_UF_NOT)) %>%  # estados
+           rename('estados' = 'Var1',
+                   'frequencia' = 'Freq') %>% 
+            mutate(porcentagem = round(frequencia/sum(frequencia)*100,digits = 2))
+
+
+tema_barras_blanck <- theme_classic() + 
+                       theme(plot.title = element_text(hjust = 0.5)) +
+                       theme(axis.text = element_text(size = 10.5, colour = "black")) +  # palavras eixo x 
+                       theme(axis.line = element_blank(),    # linha dos eixos
+                             axis.ticks = element_blank(),   # ticks eixo x
+                             axis.text.y = element_blank()) 
+
+
+teste <- estados %>% ggplot(aes(reorder(estados,porcentagem),porcentagem)) +
+            geom_bar(stat = 'identity', fill = 'darkblue') + 
+            ggtitle('') +
+            xlab('') +
+            ylab('') +
+            geom_image(aes(x = 9, y = 1.35),
+                       image = 'ban_ce.png',
+                       size = 0.08) +
+            geom_image(aes(x = 8, y = 1.35),
+                       image = 'ban_ba.png',
+                       size = 0.08) +
+            geom_image(aes(x = 7, y = 1.35),
+                       image = 'ban_pe.png',
+                       size = 0.08) +
+            geom_image(aes(x = 6, y = 1.35),
+                       image = 'ban_pb.png',
+                       size = 0.08) +
+            geom_image(aes(x = 5, y = 1.35),
+                       image = 'ban_al.png',
+                       size = 0.08) +
+            geom_image(aes(x = 4, y = 1.35),
+                       image = 'ban_ma.png',
+                       size = 0.08) +
+            geom_image(aes(x = 3, y = 1.35),
+                       image = 'ban_se.png',
+                       size = 0.08) +
+            geom_image(aes(x = 2, y = 1.35),
+                       image = 'ban_rn.png',
+                       size = 0.08) +
+            geom_image(aes(x = 1, y = 1.35),
+                       image = 'ban_pi.png',
+                       size = 0.08) +
+            geom_text(mapping = aes(label = paste(porcentagem,'%', sep = '')), cex = 4, hjust = 1.1, color = 'white' ) +
+            geom_text(mapping = aes(x = 9 , y = 0, label = paste('Ceará')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            geom_text(mapping = aes(x = 8 , y = 0, label = paste('Bahia')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            geom_text(mapping = aes(x = 7 , y = 0.3, label = paste('Pernambuco')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            geom_text(mapping = aes(x = 6 , y = 0.1, label = paste('Paraíba')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            geom_text(mapping = aes(x = 5 , y = 0.1, label = paste('Alagoas')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            geom_text(mapping = aes(x = 4 , y = 0.2, label = paste('Maranhão')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            geom_text(mapping = aes(x = 3 , y = 0, label = paste('Sergipe')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            geom_text(mapping = aes(x = 2 , y = 0.1, label = paste('Rio Grande\ndo Norte')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            geom_text(mapping = aes(x = 1 , y = 0, label = paste('Piauí')), cex = 3.5, hjust = 1.2, color = 'black' ) +
+            tema_barras_blanck +
+            scale_y_discrete(expand = expansion(add = c(5, 1.5))) +  #expansão eixo y
+            scale_x_discrete(expand = expansion(add = c(0,1))) + #expansão eixo x
+            coord_flip() 
+
+teste
+
+```
+
+**Análise municipios**
+
+
+<div style="text-align: justify">
+
+Foram feitas tabelas de distribuição de frequência para análisar os municípios, onde possui os nomes dos municipios, frequência, porcentagem e a população do censo do ano de 2010 com o 
+objetivo de observar a quantidade de registros tendo como uma das referencias a população do município e uma coluna da tabela informa o número de pessoas para cada registro de SRAG.
+
+</div>
+
+# Informações municipios  { .tabset .tabset-fade}
+
+## Alagoas  
+```{r, message=FALSE, warning=FALSE}
+
+# saida_AL <- saida_AL %>% 
+#             adorn_totals("row") %>% 
+#             kable(caption = "Distribuição de frequência entre os estados do nordeste no ano de 2021", 
+#                   format.args = list(decimal.mark = ",", big.mark = "."), col.names = c("Município","Frequência","Porcentagem (%)", "População no ano de 2010", "1 Caso a cada x pessoas")) %>% 
+#             kable_styling(bootstrap_options = c("striped","hover","condesed"), full_width = F, latex_options = "HOLD_position") 
+# 
+# 
+# saida_AL
+
+paged_table(saida_AL)
+```
+## Bahia
+```{r, message=FALSE, warning=FALSE}
+
+paged_table(saida_BA)
+```
+## Ceará
+```{r, message=FALSE, warning=FALSE}
+paged_table(saida_CE)
+```
+## Maranhão
+```{r, message=FALSE, warning=FALSE}
+paged_table(saida_MA)
+```
+## Paraíba
+```{r, message=FALSE, warning=FALSE}
+paged_table(saida_PB)
+```
+## Pernambuco
+```{r, message=FALSE, warning=FALSE}
+paged_table(saida_PE)
+```
+## Piauí
+```{r, message=FALSE, warning=FALSE}
+paged_table(saida_PI)
+```
+## Rio Grande do Norte
+```{r, message=FALSE, warning=FALSE}
+paged_table(saida_RN)
+```
+## Sergipe
+```{r, message=FALSE, warning=FALSE}
+paged_table(saida_SE)
+```
+
+
+
+# Situação vacina {.tabset}
+
+**Análise situação da vacina**
+
+
+<div style="text-align: justify">
+
+Para análisar a situação da vacina foi feito um gráfico categorico informando as três possiveis categorias e obtivemos a informação que 42,73% das pessoas que
+realizaram o registro não receberam dose de nenhuma vacina, ou seja, aproximadamente 2300 pessoas não receberam nenhuma dose da vacinapor outro lado apenas 23,54% das pessoas
+que realizaram o cadastro tomaram pelo menos 1 dose da vacina.
+
+Outra informação que obtivemos foi a situação de vacina em relação a data, onde as três curvas (Vacinado, Não Vacinado e Ignorado) tiveram um alto nivel de crescimentoe no inicio do ano e depois decrescimento  forte aproximadamente na metade do ano.
+
+
+
+</div>
+
+
+## Frequencias totais
+```{r, message=FALSE, warning=FALSE}
+
+dados <- dados %>% filter(!is.na(VACINA_COV))
+
+cont_vac_top <- data.frame(table(dados$VACINA_COV)) %>% mutate(porcentagem = round(100*(Freq/sum(Freq)),2))
+
+ggplot(data = cont_vac_top) + 
+  geom_bar(mapping = aes(x = reorder(Var1, -Freq), y = Freq), stat = "identity", fill = "darkblue") +
+  xlab("") + ylab("Frequencia") + theme_classic() +
+  theme(axis.text.x = element_text(size = 10), 
+          axis.text.y = element_text(size = 10)) +
+  geom_text(mapping = aes(x=reorder(Var1, -Freq),y=Freq,label = paste(porcentagem,'%', sep = '')), cex = 4.7, hjust = 0.5, vjust = 2, color = 'white' )
+
+```
+
+## Frequencias durante 2021
+```{r, message=FALSE, warning=FALSE}
+
+dados <- dados %>% filter(!is.na(VACINA_COV))
+
+cont_vacina_time <- dados %>% 
+                    group_by(DT_SIN_PRI,VACINA_COV) %>%
+                    summarise(contagem = n()) %>%
+                     pivot_wider(names_from = "VACINA_COV", values_from = "contagem")
+
+
+
+ggplot(cont_vacina_time) +
+  geom_line(aes(DT_SIN_PRI, Ignorado, col = "a"), stat = 'identity', size = 1) +
+  geom_line(aes(DT_SIN_PRI, Vacinado, col = "b"), stat = 'identity', size = 1) +
+  geom_line(aes(DT_SIN_PRI, `Não Vacinado`, col = "c"), stat = 'identity', size = 1) +
+  ggtitle("") + ylab('Contagem') + xlab("Data") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(name = 'Situação',labels = c("Ignorado","Vacinado","Não vacinado"))
+
+```
+
+# Gênero e Idade
+
+
+**Análise idade média para cada estado**
+
+Foi obtido o calculo das idades médias de cada estado e feito um gráfico de piramide onde não mostra grande diferença na idade média entre estados.
+
+## Idade media por gênero dos estados
+```{r, message=FALSE, warning=FALSE}
+
+dados <- dados %>% filter(NU_IDADE_N < 120)
+
+idade_med <- dados %>%
+                group_by(SG_UF_NOT,CS_SEXO) %>% 
+                summarise(idade_media = round(mean(NU_IDADE_N),digits = 2)) %>% 
+                rename('estados' = 'SG_UF_NOT',
+                       'sexo' = 'CS_SEXO')
+
+
+idade_med %>% ggplot(aes(x = reorder(estados, -idade_media),
+                         y = ifelse(sexo == 'Masculino',-idade_media, idade_media),
+                         fill = sexo)) + 
+              geom_bar(stat = 'identity') +
+              scale_y_continuous(labels = abs, expand = expansion(add = c(5, 1.5))) + # modulo e expansão eixo y
+              ggtitle('') +
+              xlab('') +
+              ylab('') +
+           #  geom_text(aes(label = idade_media), cex = 4, color = 'black') +
+              geom_text(mapping = aes(x = 9, y = -45, label = paste('54,50')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 9, y = 46, label = paste('51,72')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 8, y = -46.3, label = paste('49,71')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 8, y = 46.2, label = paste('52,85')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 7, y = -46.6, label = paste('50,34')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 7, y = 47, label = paste('53,07')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 6, y = -48.5, label = paste('50,8')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 6, y = 47.5, label = paste('52,73')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 5, y = -47.8, label = paste('50,84')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 5, y = 50.5, label = paste('53,76')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 4, y = -49.7, label = paste('51,89')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 4, y = 48.5, label = paste('56,17')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 3, y = -46.5, label = paste('52,35')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 3, y = 52.5, label = paste('56,04')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 2, y = -49.5, label = paste('53,99')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 2, y = 51.3, label = paste('55,58')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 1, y = -49.5, label = paste('54,44')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 1, y = 55, label = paste('57,18')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 9, y = -53, label = paste('BA')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 8, y = -54, label = paste('SE')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 7, y = -54, label = paste('CE')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 6, y = -55.3, label = paste('PB')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 5, y = -55.2, label = paste('AL')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 4, y = -57.3, label = paste('PE')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 3, y = -54.2, label = paste('RN')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 2, y = -57.2, label = paste('MA')), cex =3.5, color = 'black') +
+              geom_text(mapping = aes(x = 1, y = -56.3, label = paste('PI')), cex =3.5, color = 'black') +
+              scale_fill_manual(name = 'Sexo:',values = c('dodgerblue3','hotpink'), labels = c('Masculino','Feminino')) +
+              coord_flip() + 
+              scale_x_discrete(expand = expansion(add = c(0,0.7))) + #expansão eixo x
+              theme_classic() + 
+              theme(plot.title = element_text(size = 15,hjust = 0.5, colour = 'black',face = 'bold')) + #localização do titulo # eixo y
+              theme(axis.line = element_blank(),
+              axis.ticks = element_blank(),
+              axis.text = element_blank(),
+              legend.position = 'top') 
+      
+
+```
+<div style="text-align: justify">
+
+Como falado anteriormente as idades são bem equilibradas em todos os estados.
+O primeiro quartil é `r quantile(dados$NU_IDADE_N, probs = 0.25)` anos , a mediana é  `r quantile(dados$NU_IDADE_N, probs = 0.50)` anos e o terceiro é `r quantile(dados$NU_IDADE_N, probs = 0.75)` anos, consequentemente o intervalo interquartil é $IQR = Q_3 - Q_1 = 31$.
+
+</div>
+
+
+## Box plot Idade x estados
+```{r, message=FALSE, warning=FALSE}
+dados <- dados %>% filter(NU_IDADE_N < 120) %>% rename("Idade" = "NU_IDADE_N",
+                                                       "UF-Estado" = "SG_UF_NOT")
+
+
+
+ggplot(data = dados) +
+  geom_boxplot(aes(x = `UF-Estado`, y = Idade, fill = `UF-Estado`)) + coord_flip() + theme_bw()
+```
+
+
+
+
+
+# Creditos
+           
+https://www.dive.sc.gov.br/index.php/sindrome-respiratoria-aguda-grave-srag  
+https://coronavirus.saude.mg.gov.br/blog/75-o-que-e-sindrome-respiratoria-aguda-grave  
+https://covid.saude.gov.br  
+
+
+
